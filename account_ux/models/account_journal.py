@@ -53,8 +53,8 @@ class AccountJournal(models.Model):
         rec = super(AccountJournal, self).copy(default=default)
         if rec.type in ('bank', 'cash'):
             default_account = (
-                default.get('default_debit_account_id') or
-                default.get('default_credit_account_id')) if default else False
+                default.get('payment_debit_account_id') or
+                default.get('payment_credit_account_id')) if default else False
             if not default_account:
                 company = self.company_id
                 account_vals = self._prepare_liquidity_account(
@@ -65,7 +65,7 @@ class AccountJournal(models.Model):
                 default_account = self.env['account.account'].create(
                     account_vals)
                 rec.write({
-                    'default_debit_account_id': default_account.id,
-                    'default_credit_account_id': default_account.id,
+                    'payment_debit_account_id': default_account.id,
+                    'payment_credit_account_id': default_account.id,
                 })
         return rec
