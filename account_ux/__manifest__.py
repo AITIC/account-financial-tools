@@ -50,7 +50,7 @@
         'views/account_account_views.xml',
         'views/account_move_views.xml',
         'data/account_payment_method_data.xml',
-        'data/mail_data.xml',
+        #'data/mail_data.xml',
         'data/ir_parameters_data.xml',
     ],
     'demo': [
