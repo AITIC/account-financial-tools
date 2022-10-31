@@ -82,7 +82,7 @@ class ResPartner(models.Model):
         else:
             final_line = []
 
-        records = self.env['account.move.line'].sudo().search(domain, order='date asc, date_maturity asc, name, id')
+        records = self.env['account.move.line'].sudo().search(domain, order='date asc, name, move_id desc, date_maturity asc, id')
 
         grouped = self.env['account.payment']._fields.get('payment_group_id') and safe_eval(
             self.env['ir.config_parameter'].sudo().get_param(
@@ -96,12 +96,14 @@ class ResPartner(models.Model):
             detail_lines = []
             if show_invoice_detail:
                 for inv_line in record.move_id.invoice_line_ids:
+                    inv_line_name = inv_line.name or "Sin descripción"
+                    inv_line_product_uom_id_name = inv_line.product_uom_id.name or "Sin unidad de medida"
                     detail_lines.append(
                         ("* %s x %s %s" % (
-                            inv_line.name.replace(
+                            inv_line_name.replace(
                                 '\n', ' ').replace('\r', ''),
                             inv_line.quantity,
-                            inv_line.product_uom_id.name)))
+                            inv_line_product_uom_id_name)))
             name = record.move_id.name
             # similar to _format_aml_name
             if record.ref and record.ref != '/':
@@ -130,6 +132,8 @@ class ResPartner(models.Model):
             elif not grouped and record.payment_id:
                 # si no agrupamos y es pago, agregamos nombre de diario para que sea mas claro
                 name += ' - ' + record.journal_id.name
+            elif not record.payment_id:
+                last_payment_group_id = False
 
             # TODO tal vez la suma podriamos probar hacerla en el xls como hacemos en libro iva v11/v12
             res.append(get_line_vals(
