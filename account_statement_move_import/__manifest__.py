@@ -32,12 +32,13 @@
         'account',
     ],
     'data': [
+        'security/ir.model.access.csv',
         'wizard/account_statement_move_import_wizard_view.xml',
         'views/account_views.xml',
     ],
     'demo': [
     ],
-    'installable': False,
+    'installable': True,
     'auto_install': False,
     'application': False,
 }
