@@ -90,8 +90,8 @@ class AccountStatementMoveImportWizard(models.TransientModel):
 
     @api.depends('journal_id')
     def _compute_get_accounts(self):
-        self.journal_account_ids = (
-            self.journal_id.default_account_id)
+        self.journal_account_ids = (self.journal_id._get_journal_inbound_outstanding_payment_accounts()
+                                    + self.journal_id._get_journal_outbound_outstanding_payment_accounts())
 
     def confirm(self):
         self.ensure_one()
