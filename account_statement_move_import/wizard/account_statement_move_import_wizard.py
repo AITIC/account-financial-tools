@@ -77,6 +77,7 @@ class AccountStatementMoveImportWizard(models.TransientModel):
             ('statement_line_id', '=', False),
             ('date', '>=', self.from_date),
             ('date', '<=', self.to_date),
+            ('move_id.state', '=', 'posted')
         ])
         self.move_line_ids = move_lines
         return {
