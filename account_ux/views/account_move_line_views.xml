@@ -70,10 +70,10 @@
             <field name="amount_currency" position="attributes">
                 <attribute name="optional">hide</attribute>
             </field>
-            <field name="credit" position="after">
+           <!-- <field name="credit" position="after">
                 <field name="balance" sum="Balance" readonly="1" optional="hide"/>
             </field>
-            <!-- <field name="full_reconcile_id" position="attributes">
+             <field name="full_reconcile_id" position="attributes">
                 <attribute name="optional">hide</attribute>
             </field> -->
         </field>
