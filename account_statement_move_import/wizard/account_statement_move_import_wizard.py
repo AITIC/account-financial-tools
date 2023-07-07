@@ -56,6 +56,8 @@ class AccountStatementMoveImportWizard(models.TransientModel):
                 fields.append(field)
         for field in fields:
             del field_onchange[field]
+        if 'journal_account_ids' in field_onchange:
+            del field_onchange['journal_account_ids']
         return super().onchange(values, field_name, field_onchange)
 
     @api.onchange('statement_id')
