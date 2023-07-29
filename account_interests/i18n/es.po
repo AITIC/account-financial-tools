@@ -1,18 +1,19 @@
 # Translation of Odoo Server.
 # This file contains the translation of the following modules:
-# * account_interests
+# 	* account_interests
 # 
 # Translators:
-# Federico La Torre <3doeste@gmail.com>, 2019
 # Juan José Scarafía <scarafia.juanjose@gmail.com>, 2020
+# Juan Carreras <jc@adhoc.com.ar>, 2020
+# Juan Rivero <jr@adhoc.com.ar>, 2021
 # 
 msgid ""
 msgstr ""
-"Project-Id-Version: Odoo Server 12.0\n"
+"Project-Id-Version: Odoo Server 13.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2019-12-26 01:12+0000\n"
-"PO-Revision-Date: 2019-11-19 19:09+0000\n"
-"Last-Translator: Juan José Scarafía <scarafia.juanjose@gmail.com>, 2020\n"
+"POT-Creation-Date: 2021-01-16 10:07+0000\n"
+"PO-Revision-Date: 2020-03-10 16:54+0000\n"
+"Last-Translator: Juan Rivero <jr@adhoc.com.ar>, 2021\n"
 "Language-Team: Spanish (https://www.transifex.com/adhoc/teams/46451/es/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -65,12 +66,12 @@ msgstr "Crear facturas de intereses"
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__create_uid
 msgid "Created by"
-msgstr "Created by"
+msgstr "Creado por"
 
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__create_date
 msgid "Created on"
-msgstr "Created on"
+msgstr "Creado en"
 
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__receivable_account_ids
@@ -88,12 +89,12 @@ msgid "Date of Next Invoice"
 msgstr "Fecha de Próxima Factura"
 
 #. module: account_interests
-#: selection:res.company.interest,rule_type:0
+#: model:ir.model.fields.selection,name:account_interests.selection__res_company_interest__rule_type__daily
 msgid "Day(s)"
 msgstr "Día(s)"
 
 #. module: account_interests
-#: code:addons/account_interests/models/res_company_interest.py:207
+#: code:addons/account_interests/models/res_company_interest.py:0
 #, python-format
 msgid ""
 "Deuda Vencida al %s: %s\n"
@@ -123,11 +124,9 @@ msgid "ID"
 msgstr "ID"
 
 #. module: account_interests
-#: model:ir.model.fields,help:account_interests.field_res_company_interest__invoice_receivable_account_id
-msgid "If no account is sellected, then partner receivable account is used"
-msgstr ""
-"Si no se selecciona una cuenta entonces se va a utilizar la cuenta a cobrar "
-"del cliente"
+#: model_terms:ir.ui.view,arch_db:account_interests.view_automatic_interests_company_form
+msgid "Intereses Automáticos"
+msgstr "Intereses Automáticos"
 
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company__interest_ids
@@ -148,16 +147,6 @@ msgstr ""
 " "
 
 #. module: account_interests
-#: model_terms:ir.ui.view,arch_db:account_interests.view_kinesis_athletics_company_form
-msgid "Interéses Automáticos"
-msgstr "Interéses Automáticos"
-
-#. module: account_interests
-#: model:ir.model.fields,field_description:account_interests.field_res_company_interest__invoice_receivable_account_id
-msgid "Invoice Receivable Account"
-msgstr "Cuenta a Cobrar en Factura"
-
-#. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest____last_update
 msgid "Last Modified on"
 msgstr "Última Modificación en"
@@ -165,15 +154,15 @@ msgstr "Última Modificación en"
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__write_uid
 msgid "Last Updated by"
-msgstr "Last Updated by"
+msgstr "Última actualización realizada por"
 
 #. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__write_date
 msgid "Last Updated on"
-msgstr "Last Updated on"
+msgstr "Última Actualización en"
 
 #. module: account_interests
-#: selection:res.company.interest,rule_type:0
+#: model:ir.model.fields.selection,name:account_interests.selection__res_company_interest__rule_type__monthly
 msgid "Month(s)"
 msgstr "Mes(es)"
 
@@ -183,7 +172,7 @@ msgid "Number of periods of tolerance for dues. 0 = no tolerance"
 msgstr "Número de períodos de tolerancia para deudas. 0 = sin tolerancia"
 
 #. module: account_interests
-#: model_terms:ir.ui.view,arch_db:account_interests.view_kinesis_athletics_company_form
+#: model_terms:ir.ui.view,arch_db:account_interests.view_automatic_interests_company_form
 msgid "Overdue Payments"
 msgstr "Pagos Vencidos"
 
@@ -203,23 +192,16 @@ msgid "Repeat every (Days/Week/Month/Year)"
 msgstr "Repetir cada (Día/Semana/Mes/Año)"
 
 #. module: account_interests
-#: code:addons/account_interests/models/res_company_interest.py:258
-#, python-format
-msgid "The interest product is not properly configured, missing account."
-msgstr ""
-"El producto de interés no está configurado correctamente, falta la cuenta."
-
-#. module: account_interests
 #: model:ir.model.fields,field_description:account_interests.field_res_company_interest__tolerance_interval
 msgid "Tolerance"
 msgstr "Tolerancia"
 
 #. module: account_interests
-#: selection:res.company.interest,rule_type:0
+#: model:ir.model.fields.selection,name:account_interests.selection__res_company_interest__rule_type__weekly
 msgid "Week(s)"
 msgstr "Semana(s)"
 
 #. module: account_interests
-#: selection:res.company.interest,rule_type:0
+#: model:ir.model.fields.selection,name:account_interests.selection__res_company_interest__rule_type__yearly
 msgid "Year(s)"
 msgstr "Año(s)"

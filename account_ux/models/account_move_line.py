@@ -2,13 +2,18 @@
 # © 2016 ADHOC SA
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import models, api, _
+from odoo import models, fields, api, _
 from odoo.tools import float_is_zero, float_compare
 from datetime import date
 
 
 class AccountMoveLine(models.Model):
     _inherit = "account.move.line"
+
+    # TODO remove or don't store on v15, use new functionality to be able to group without storing
+    user_id = fields.Many2one(
+        string='Contact Salesperson', related='partner_id.user_id', store=True,
+        help='Salesperson of contact related to this journal item')
 
     def get_model_id_and_name(self):
         # Function used to display the right action on journal
@@ -42,6 +47,8 @@ class AccountMoveLine(models.Model):
         no tiene moneda.
         Va de la mano de la modificación de "create" en
         account.partial.reconcile
+        Para que este cambio funcione bien es ademas importante este parche en odoo
+        https://github.com/odoo/odoo/pull/63390
         """
         if self and self[0].company_id.country_id == self.env.ref('base.ar') and not self[0].account_id.currency_id:
             field = 'amount_residual'

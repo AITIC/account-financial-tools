@@ -3,6 +3,7 @@
 # directory
 ##############################################################################
 from odoo import fields, models, api, _
+from odoo.exceptions import ValidationError
 
 
 class AccountChangeCurrency(models.TransientModel):
@@ -52,8 +53,15 @@ class AccountChangeCurrency(models.TransientModel):
                 )
             self.currency_rate = currency._convert(
                 1.0, self.currency_to_id, self.move_id.company_id,
-                date=self.move_id.invoice_date or
+                date=self.move_id.date or
                 fields.Date.context_today(self))
+
+    @api.constrains('currency_to_id', 'currency_rate')
+    def _prevent_change_currency(self):
+        """prevent currency or currency rate change when the invoice is not draft
+        """
+        if self.move_id.state != 'draft':
+            raise ValidationError(_('This invoice is not draft, reset it to draft to change currency or currency rate'))
 
     def change_currency(self):
         self.ensure_one()
@@ -70,5 +78,10 @@ class AccountChangeCurrency(models.TransientModel):
             line.price_unit = line.price_unit * self.currency_rate
         move.currency_id = self.currency_to_id.id
         move._onchange_currency()
+
+        # This is required to compute to recompute the tax lines again
+        if self.currency_rate != 1:
+            move._recompute_dynamic_lines(recompute_all_taxes=True)
+
         self.move_id.message_post(body=message)
         return {'type': 'ir.actions.act_window_close'}

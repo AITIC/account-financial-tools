@@ -16,11 +16,13 @@ Account UX
 
 Several Improvements to accounting:
 
+#. Fixed taxes not being recomputed when changing invoice.
+#. Improove partner ledger usability
+#. Make subtotal included / excluded optional and not related to tax b2b/b2c
 #. Reconcile on company currency if account don't have a currency and country is Argentina (if any other country need this it should make a PR and add itself)
 #. If user sets and account of a liquidity type and previous type was not liquidity and not reconcilable, recompute amounts residual because they are used on liquidity accounts
 #. On invoice validation check that user hasn't delete any "automatic" tax from invoice
 #. Add reconciliations menu on accounting (only with debug mode)
-#. When creatin banks from bank menu, use bank name + account number for journal name (by default only account number is used). And also allow user to change this value (by default user can't)
 #. Add debit and credit card payment methods
 #. For inbound debit and credit payments, allow to configure days for collection. This will be used to set maturity date of related journal entries
 #. Add online payment method on journals
@@ -54,6 +56,7 @@ Several Improvements to accounting:
 #. Add internal notes on invoices (account.move) to be used later by sales / pickings
 #. Show the "Reversal of" field always, like the origin field, not matter if the field is set or not or the type of account.move.
 #. Add filter by vat in the partners list views.
+#. Allow to disable the hash in the journal to restrict entries deletion.
 #. This replace original odoo wizard for changing currency on an invoice with serveral improvements:
 
    * Preview and allow to change the rate thats is going to be used.
@@ -64,6 +67,9 @@ Several Improvements to accounting:
    * We can restrict the change of the currency for a group of users by adding them to "Restrict Change Invoice Currency Exchange" group
 
 #. Add constraint invoice-journal-type to let the user create sales/purchase invoices exclusively in the respectives sales/purchase journals:
+#. Add amount_total and amount_untaxed in the invoice tree view as optional and hide fields
+#. Add new filter 'Without resiual' on partner ledger
+#. Make Debit Note Origin field visible and editable by the user in the account.move form view. This will help to link new debit notes with the original invoice when this ones were not created from invoices "Add Debit Note" action button directly.
 
 Installation
 ============
