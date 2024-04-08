@@ -8,13 +8,14 @@
         <field name="priority" eval="20"/>
         <field name="arch" type="xml">
             <!-- Make subtotal included / excluded optional and not related to tax b2b/b2c -->
+            <!-- Permitimos ocultar subtotal sin impuestos -->
             <field name="price_subtotal" position="attributes">
-                <attribute name="groups"></attribute>
                 <attribute name="optional">show</attribute>
             </field>
+            <!-- odoo lo hace invisible si la company tiene tax_calculation_rounding_method = rounding globally, -->
+            <!-- nosotros dejamos que sin importqar ese parametro se puedamos mostrar -->
             <field name="price_total" position="attributes">
-                <attribute name="groups"></attribute>
-                <attribute name="optional">hide</attribute>
+                <attribute name="column_invisible"></attribute>
             </field>
 
             <button name="button_draft" position="after">
@@ -62,7 +63,13 @@
                 <button name="%(action_account_change_currency)d" type="action" invisible="state != 'draft'" icon="fa-pencil" class="btn-link" title="Change Currency" groups="base.group_multi_currency" />
                 <field name="other_currency" invisible="1"/>
             </xpath>
-
+            <!-- agregamos para que el grupo  account.group_account_invoice tambien pueda cambiar el diario de facturacion -->
+            <label for="journal_id" position="attributes">
+                <attribute name="groups" separator="," add="account.group_account_invoice" />
+            </label>
+            <xpath expr="//div[@name='journal_div']" position="attributes">
+                <attribute name="groups" separator="," add="account.group_account_invoice" />
+            </xpath>
         </field>
     </record>
 
@@ -89,6 +96,9 @@
             <field name="partner_id" position="before">
                 <field name="company_id" groups="base.group_multi_company"/>
             </field>
+            <xpath expr="//filter[@name='closed']" position="replace">
+                <filter name="closed" string="Paid" domain="[('state', '=', 'posted'), ('payment_state', 'in', ('in_payment', 'paid','reversed'))]"/>
+            </xpath>
             <xpath expr="//group/filter[@name='salesperson']" position="before">
                 <filter name="partner_id" string="Partner" context="{'group_by':'partner_id'}"/>
                 <filter name="journal_id" string="Journal" context="{'group_by':'journal_id'}"/>
