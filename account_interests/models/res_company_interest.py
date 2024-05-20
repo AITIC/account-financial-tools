@@ -33,7 +33,7 @@ class ResCompanyInterest(models.Model):
         'Interest Product',
         required=True,
     )
-    analytic_line_ids = fields.Many2one(
+    analytic_account_id = fields.Many2one(
         'account.analytic.account',
         'Analytic account',
     )
@@ -143,22 +143,18 @@ class ResCompanyInterest(models.Model):
             ('company_id', '=', self.company_id.id)], limit=1)
 
         move_line_domain = self._get_move_line_domains(to_date)
-
         # Check if a filter is set
         if self.domain:
             move_line_domain += safe_eval(self.domain)
 
-        fields = ['id', 'amount_residual', 'partner_id', 'account_id']
-        if groupby not in fields:
-            fields += [groupby]
+        fields = ['id:recordset', 'amount_residual:sum', 'partner_id:recordset', 'account_id:recordset']
 
         move_line = self.env['account.move.line']
-        grouped_lines = move_line.read_group(
+        grouped_lines = move_line._read_group(
             domain=move_line_domain,
-            fields=fields,
             groupby=[groupby],
+            aggregates=fields,
         )
-
         self = self.with_context(
             company_id=self.company_id.id,
             mail_notrack=True,
@@ -167,8 +163,7 @@ class ResCompanyInterest(models.Model):
         total_items = len(grouped_lines)
         _logger.info('%s interest invoices will be generated', total_items)
         for idx, line in enumerate(grouped_lines):
-
-            debt = line['amount_residual']
+            debt = line[2]
 
             if not debt or debt <= 0.0:
                 _logger.info("Debt is negative, skipping...")
@@ -177,12 +172,10 @@ class ResCompanyInterest(models.Model):
             _logger.info(
                 'Creating Interest Invoice (%s of %s) with values:\n%s',
                 idx + 1, total_items, line)
-            partner_id = line[groupby][0]
-
+            partner_id = line[0].id
             partner = self.env['res.partner'].browse(partner_id)
             move_vals = self._prepare_interest_invoice(
                 partner, debt, to_date, journal)
-
             move = self.env['account.move'].create(move_vals)
 
             if self.automatic_validation:
@@ -232,7 +225,7 @@ class ResCompanyInterest(models.Model):
                 "price_unit": self.rate * debt,
                 "partner_id": partner.id,
                 "name": self.interest_product_id.name + '.\n' + comment,
-                "analytic_line_ids": [(self.analytic_line_ids.id, )],
+                "analytic_distribution": {self.analytic_account_id.id: 100.0} if self.analytic_account_id.id else False,
                 "tax_ids": [(6, 0, tax_id.ids)]
             })],
         }
