@@ -7,29 +7,29 @@ class TestAccountUXChangeCurrency(common.TransactionCase):
     def setUp(self):
         super().setUp()
         self.today = fields.Date.today()
-        self.first_company = self.env['res.company'].search([], limit=1)
-        self.partner_ri = self.env['res.partner'].search([], limit=1)
+        self.company_usd = self.env.ref('base.main_company')
+        self.partner = self.env.ref('base.res_partner_12')
 
-        self.currency_usd = self.env['res.currency'].search([('name', '=', 'USD')])
-        self.currency_ars = self.env['res.currency'].search([('name', '=', 'ARS'), ('active', 'in', [False])])
-        self.currency_ars.active = True
+        self.currency_usd = self.env.ref('base.USD')
+        self.currency_ars = self.env.ref('base.ARS')
+        self.currency_ars.write({'active': True})
 
-        self.first_company_journal_usd = self.env['account.journal'].search([('company_id', '=', self.first_company.id), ('type', '=', 'sale')], limit=1)
-        self.first_company_journal_ars = self.env['account.journal'].create({
-            'name': 'ARS sale journal',
-            'company_id': self.first_company.id,
-            'type': 'sale',
-            'currency_id': self.currency_ars.id,
-            'code': 'ARS'
+        self.journal_usd = self.env.ref('account.1_sale')
+
+        self.journal_ars = self.env.ref('account.1_purchase')
+
+        self.journal_ars.write({
+            'type': "sale",
+            'currency_id': self.currency_ars
         })
 
     def test_account_ux_change_currency(self):
         invoice = self.env['account.move'].create({
-            'partner_id': self.partner_ri.id,
+            'partner_id': self.partner.id,
             'date': self.today,
             'move_type': 'out_invoice',
-            'journal_id': self.first_company_journal_usd.id,
-            'company_id': self.first_company.id,
+            'journal_id': self.journal_usd.id,
+            'company_id': self.company_usd.id,
             'invoice_line_ids': [
                 Command.create({
                     'product_id': self.env.ref('product.product_product_16').id,
@@ -38,9 +38,12 @@ class TestAccountUXChangeCurrency(common.TransactionCase):
                 }),
             ],
         })
-        invoice.write({
-            'journal_id': self.first_company_journal_ars.id
-        })
-        invoice.action_post()
 
-        self.assertEqual(invoice.currency_id, self.first_company_journal_ars.currency_id, "La moneda de la factura no esta siendo modificada al cambiar el diario.")
+        invoice.write({
+            'journal_id': self.journal_ars.id
+        })
+
+        invoice.action_post()
+        
+        self.assertEqual(invoice.currency_id, self.journal_ars.currency_id,
+                         "La moneda de la factura no está siendo modificada al cambiar el diario.")

@@ -19,7 +19,7 @@
 ##############################################################################
 {
     'name': 'Account UX',
-    'version': "17.0.2.2.0",
+    'version': "17.0.2.8.0",
     'category': 'Accounting',
     'sequence': 14,
     'summary': '',
@@ -46,6 +46,8 @@
         'views/account_account_views.xml',
         'views/account_move_views.xml',
         'views/account_payment_views.xml',
+        'views/res_config_settings_views.xml',
+        'views/report_payment_receipt_templates.xml',
         'reports/account_invoice_report_view.xml',
     ],
     'demo': [
