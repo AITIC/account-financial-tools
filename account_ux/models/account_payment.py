@@ -1,32 +1,17 @@
-# © 2016 ADHOC SA
-# License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
-
-from odoo import models, fields
-import datetime
+##############################################################################
+# For copyright and license notices, see __manifest__.py file in module root
+# directory
+##############################################################################
+from odoo import models, api, fields, _
+from odoo.exceptions import ValidationError
 
 
 class AccountPayment(models.Model):
-    _inherit = "account.payment"
+    _inherit = 'account.payment'
 
-    def _get_liquidity_move_line_vals(self, amount):
-        vals = super()._get_liquidity_move_line_vals(amount)
-        days_for_collection = False
-        journal = self.journal_id
-        if (self.payment_method_code == 'inbound_debit_card'):
-            days_for_collection = journal.debit_card_days_for_collection
-        elif (self.payment_method_code == 'inbound_credit_card'):
-            days_for_collection = journal.credit_card_days_for_collection
-        if days_for_collection:
-            vals['date_maturity'] = fields.Date.to_string(
-                fields.Date.from_string(
-                    self.payment_date) + datetime.timedelta(days=10))
-        return vals
-
-    def action_draft(self):
-        """
-        On payment back to draft delete move_name as we wont to allow deletion of
-        payments. TODO: this could be parametrizable
-        """
-        res = super().action_draft()
-        self.write({'move_name': False})
-        return res
+    @api.onchange('available_journal_ids')
+    def _onchange_available_journal_ids(self):
+        """ Fix the use case where a journal only suitable for one kind of operation (lets said inbound) is selected
+        and then the user selects "outbound" type, the journals remains selected."""
+        if not self.journal_id or self.journal_id not in self.available_journal_ids._origin:
+            self.journal_id = self.available_journal_ids._origin[:1]

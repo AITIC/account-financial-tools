@@ -5,6 +5,7 @@
 from odoo import models, fields, api, _
 from odoo.tools.safe_eval import safe_eval
 from dateutil.relativedelta import relativedelta
+from odoo.exceptions import UserError
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -25,8 +26,8 @@ class ResCompanyInterest(models.Model):
         string='Cuentas a Cobrar',
         help='Cuentas a Cobrar que se tendrán en cuenta para evaular la deuda',
         required=True,
-        domain="[('user_type_id.type', '=', 'receivable'),"
-        "('company_id', '=', company_id)]",
+        domain=lambda self: [('account_type', '=', 'asset_receivable'),
+                             ('company_id', '=', self._context.get('default_company_id') or self.env.company.id)],
     )
     interest_product_id = fields.Many2one(
         'product.product',
@@ -77,19 +78,68 @@ class ResCompanyInterest(models.Model):
         help="Extra filters that will be added to the standard search"
     )
     has_domain = fields.Boolean(compute="_compute_has_domain")
+    bypass_company_interest = fields.Boolean(
+        'Bypass Company Interest',
+        help='Bypass the company interest calculation',
+        default=False,
+    )
 
     @api.model
-    def _cron_recurring_interests_invoices(self):
+    def _cron_recurring_interests_invoices(self, batch_size=1):
+        # batch_size is the batch of companies to process
         _logger.info('Running Interest Invoices Cron Job')
         current_date = fields.Date.today()
-        self.search([('next_date', '<=', current_date)]
-                    ).create_interest_invoices()
+
+        parameter_name = 'account_interest.last_updated_record_id'
+        last_updated_param = self.env['ir.config_parameter'].sudo().search([('key', '=', parameter_name)], limit=1)
+        if not last_updated_param:
+            last_updated_param = self.env['ir.config_parameter'].sudo().create({'key': parameter_name, 'value': '0'})
+        # Obtiene los registros ordenados por id
+        domain = [('id', '>', int(last_updated_param.value)),('next_date', '<=', current_date),('bypass_company_interest','=',False)]
+        records = self.with_context(prefetch_fields=False).search(domain, order='id asc')
+        
+        #Ya de esta forma se esta recorriendo por compañia
+        for rec in records[:batch_size]:
+            try:
+                rec.create_interest_invoices()
+                rec.env.cr.commit()
+            except Exception as e:
+                _logger.error('Error creating interest invoices for company: %s, Error: %s', rec.company_id.name, str(e))
+                rec.env.cr.rollback()
+
+                rec.company_id.message_post(body=_(
+                    "We couldn't run interest invoices cron job in the company: %s,  Error: %s" % (rec.company_id.name, str(e))
+                ))
+                rec.bypass_company_interest = True
+                rec.env.cr.commit()
+        
+        
+        if len(records) >= batch_size:
+            last_updated_id = records[batch_size-1].id
+        else:
+            last_updated_id = 0
+            avoid_companies = self.with_context(prefetch_fields=False).search([('next_date', '<=', current_date),('bypass_company_interest','=',True)])
+            if avoid_companies:
+                company_names = ', '.join(avoid_companies.mapped('company_id.name'))
+                error_message = _("We couldn't run interest invoices cron job in the following companies: %s.") % company_names
+                avoid_companies.bypass_company_interest = False
+                self.env.cr.commit()
+                raise UserError(error_message)
+
+        self.env['ir.config_parameter'].sudo().set_param(parameter_name, str(last_updated_id))
+        self.env.cr.commit()
+
+        if last_updated_id:
+            cron = self.env['ir.cron'].browse(self.env.context.get('job_id')) or self.env.ref('account_interests.cron_recurring_interests_invoices')
+            cron._trigger()
 
     def create_interest_invoices(self):
         for rec in self:
             _logger.info(
                 'Creating Interest Invoices (id: %s, company: %s)', rec.id,
                 rec.company_id.name)
+            # hacemos un commit para refrescar cache
+            self.env.cr.commit()
             interests_date = rec.next_date
 
             rule_type = rec.rule_type
@@ -115,7 +165,9 @@ class ResCompanyInterest(models.Model):
             # para lo que vencio en este ultimo periodo
             to_date = interests_date - tolerance_delta
             from_date = to_date - tolerance_delta
-            rec.with_context(default_l10n_ar_afip_asoc_period_start=from_date,
+            # llamamos a crear las facturas con la compañia del interes para
+            # que tome correctamente las cuentas
+            rec.with_company(rec.company_id).with_context(default_l10n_ar_afip_asoc_period_start=from_date,
                              default_l10n_ar_afip_asoc_period_end=to_date).create_invoices(to_date)
 
             # seteamos proxima corrida en hoy mas un periodo
@@ -134,11 +186,6 @@ class ResCompanyInterest(models.Model):
 
     def create_invoices(self, to_date, groupby='partner_id'):
         self.ensure_one()
-
-        journal = self.env['account.journal'].search([
-            ('type', '=', 'sale'),
-            ('company_id', '=', self.company_id.id)], limit=1)
-
         move_line_domain = self._get_move_line_domains(to_date)
 
         # Check if a filter is set
@@ -156,43 +203,59 @@ class ResCompanyInterest(models.Model):
             groupby=[groupby],
         )
 
+        total_items = len(grouped_lines)
+        batch_size = 100
+        batch_start = 0
+
         self = self.with_context(
             company_id=self.company_id.id,
-            force_company=self.company_id.id,
             mail_notrack=True,
-            prefetch_fields=False)
+            prefetch_fields=False
+        ).with_company(self.company_id)
 
-        total_items = len(grouped_lines)
-        _logger.info('%s interest invoices will be generated', total_items)
-        for idx, line in enumerate(grouped_lines):
+        while batch_start < total_items:
+            batch = grouped_lines[batch_start:batch_start + batch_size]
+            _logger.info('Processing batch %s to %s of %s', batch_start + 1, batch_start + len(batch), total_items)
 
-            debt = line['amount_residual']
+            for idx, line in enumerate(batch, start=batch_start):
+                _logger.info(
+                    'Creating Interest Invoice (%s of %s) with values:\n%s',
+                    idx + 1, total_items, line)
 
-            if not debt or debt <= 0.0:
-                _logger.info("Debt is negative, skipping...")
-                continue
+                debt = line['amount_residual']
+                if not debt or debt <= 0.0:
+                    _logger.info("Debt is negative, skipping...")
+                    continue
 
-            _logger.info(
-                'Creating Interest Invoice (%s of %s) with values:\n%s',
-                idx + 1, total_items, line)
-            partner_id = line[groupby][0]
+                partner_id = line[groupby][0]
+                partner = self.env['res.partner'].browse(partner_id)
 
-            partner = self.env['res.partner'].browse(partner_id)
-            move_vals = self._prepare_interest_invoice(
-                partner, debt, to_date, journal)
+                # Buscar el diario apropiado
+                journal = self.env['account.move'].with_context(
+                    internal_type='debit_note',
+                    default_move_type='out_invoice'
+                ).new({
+                    'partner_id': partner_id,
+                    'move_type': 'out_invoice'
+                }).journal_id
 
-            # We send document type for compatibility with argentinian invoices
-            move = self.env['account.move'].with_context(
-                internal_type='debit_note').create(move_vals)
+                if self.receivable_account_ids != journal.default_account_id:
+                    journal = self.env['account.journal'].search(
+                        [('default_account_id', 'in', self.receivable_account_ids.ids)],
+                        limit=1
+                    ) or journal
 
-            if self.automatic_validation:
-                try:
-                    move.action_post()
-                except Exception as e:
-                    _logger.error(
-                        "Something went wrong creating "
-                        "interests invoice: {}".format(e))
+                move_vals = self._prepare_interest_invoice(partner, debt, to_date, journal)
+                move = self.env['account.move'].create(move_vals)
 
+                if self.automatic_validation:
+                    try:
+                        move.action_post()
+                    except Exception as e:
+                        _logger.error("Something went wrong creating interests invoice: %s", e)
+
+            batch_start += batch_size
+        
     def prepare_info(self, to_date, debt):
         self.ensure_one()
 
@@ -215,9 +278,9 @@ class ResCompanyInterest(models.Model):
         fpos = partner.property_account_position_id
         taxes = self.interest_product_id.taxes_id.filtered(
             lambda r: r.company_id == self.company_id)
-        tax_id = fpos.map_tax(taxes, self.interest_product_id)
+        tax_id = fpos.map_tax(taxes)
         invoice_vals = {
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'currency_id': self.company_id.currency_id.id,
             'partner_id': partner.id,
             'fiscal_position_id': fpos.id,
@@ -225,6 +288,7 @@ class ResCompanyInterest(models.Model):
             'company_id': self.company_id.id,
             'journal_id': journal.id,
             'invoice_origin': "Interests Invoice",
+            'invoice_payment_term_id': False,
             'narration': self.interest_product_id.name + '.\n' + comment,
             'invoice_line_ids': [(0, 0, {
                 "product_id": self.interest_product_id.id,
@@ -232,10 +296,21 @@ class ResCompanyInterest(models.Model):
                 "price_unit": self.rate * debt,
                 "partner_id": partner.id,
                 "name": self.interest_product_id.name + '.\n' + comment,
-                "analytic_account_id": self.analytic_account_id.id,
+                "analytic_distribution": {self.analytic_account_id.id: 100.0} if self.analytic_account_id.id else False,
                 "tax_ids": [(6, 0, tax_id.ids)]
             })],
         }
+
+        # hack para evitar modulo glue con l10n_latam_document
+        if journal._fields.get('l10n_latam_use_documents') and journal.l10n_latam_use_documents:
+            debit_note = self.env['account.move'].new({
+                'move_type': 'out_invoice',
+                'journal_id': journal.id,
+                'partner_id': partner.id,
+                'company_id': self.company_id.id,
+            })
+            document_types = debit_note.l10n_latam_available_document_type_ids.filtered(lambda x: x.internal_type == 'debit_note')
+            invoice_vals['l10n_latam_document_type_id'] = document_types and document_types[0]._origin.id or debit_note.l10n_latam_document_type_id.id
 
         return invoice_vals
 

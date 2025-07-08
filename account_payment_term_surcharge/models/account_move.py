@@ -1,6 +1,5 @@
-from odoo import fields, models, _, api
+from odoo import fields, models, _, api, Command
 from odoo.exceptions import UserError
-from odoo.tools import float_round
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -11,34 +10,65 @@ class AccountMove(models.Model):
 
     next_surcharge_date = fields.Date(compute='_compute_next_surcharge', store=True)
     next_surcharge_percent = fields.Float(compute='_compute_next_surcharge', store=True)
-    
-    def _cron_recurring_surcharges_invoices(self):
+    avoid_surcharge_invoice = fields.Boolean()
+
+    def _cron_recurring_surcharges_invoices(self, batch_size=60):
         current_date = fields.Date.context_today(self)
         domain = [
             ('next_surcharge_date', '<=', current_date),
             ('state', '=', 'posted'),
-            ('invoice_payment_state', '=', 'not_paid')]
+            ('payment_state', 'in', ['not_paid', 'partial']),
+            ('avoid_surcharge_invoice', '=', False)]
         _logger.info('Running Surcharges Invoices Cron Job, pendientes por procesar %s facturas' % self.search_count(domain))
-        self.search(domain, limit=600).create_surcharges_invoices()
+        to_create = self.search(domain)
+        to_create[:batch_size].create_surcharges_invoices()
+        if len(to_create) > batch_size:
+            self.env.ref('account_payment_term_surcharge.cron_recurring_surcharges_invoices')._trigger()
 
     def create_surcharges_invoices(self):
+        invoice_with_errors = []
         for rec in self:
             _logger.info(
                 'Creating Surcharges Invoices (id: %s, company: %s)', rec.id,
                 rec.company_id.name)
-            rec.create_surcharge_invoice(rec.next_surcharge_date, rec.next_surcharge_percent)
+            try:
+                rec.create_surcharge_invoice(rec.next_surcharge_date, rec.next_surcharge_percent)
+                rec.env.cr.commit()
+            except:
+                invoice_with_errors.append(rec.id)
+                rec.avoid_surcharge_invoice = True
+                _logger.error("Something went wrong creating the surcharge invoice from the invoice id:{}".format(rec.id))
+                message_body = _("Something went wrong creating the surcharge invoice from this invoice. Please take a look on it.")
+                partner_ids = rec.message_partner_ids.filtered(lambda x: not x.partner_share)
+                rec.message_post(
+                    body=message_body,
+                    partner_ids=partner_ids.ids,
+                    subtype_xmlid='mail.mt_note'
+                )
+                rec.env.cr.commit()
+                continue
+        if invoice_with_errors:
+            error_message = _("We couldn't run surcharges cron job in the following invoice: %s.") % invoice_with_errors
+            raise UserError(error_message)
+        
 
     def create_surcharge_invoice(self, surcharge_date, surcharge_percent):
         self.ensure_one()
         product = self.company_id.payment_term_surcharge_product_id
         if not product:
             raise UserError('Atención, debes configurar un producto por defecto para que aplique a la hora de crear las facturas de recargo')
+        validate_percent = self._validate_next_surcharge_percent(surcharge_date, surcharge_percent)
+        if not validate_percent:
+            raise UserError('Atención,el next surcharge date no es compatible con el next surcharge percent.')
         debt = self.amount_residual
-        move_debit_note_wiz = self.env['account.debit.note'].with_context(active_model="account.move",
-                                                                          active_ids=self.ids).create({
-            'date': surcharge_date,
-            'reason': 'Surcharge Invoice',
-        })
+        move_debit_note_wiz = self.env['account.debit.note'].with_context(
+            active_model="account.move",
+            active_ids=self.ids).create(
+                {
+                    'date': surcharge_date,
+                    'reason': 'Surcharge Invoice',
+                }
+            )
         debit_note = self.env['account.move'].browse(move_debit_note_wiz.create_debit().get('res_id'))
         debit_note.narration = product.name + '.\n' + self.prepare_info(surcharge_date, debt, surcharge_percent)
         self._add_surcharge_line(debit_note, product, debt, surcharge_date, surcharge_percent)
@@ -54,7 +84,6 @@ class AccountMove(models.Model):
 
     def prepare_info(self, to_date, debt, surcharge):
         self.ensure_one()
-        # Format date to customer language
         lang_code = self.env.context.get('lang', self.env.user.lang)
         lang = self.env['res.lang']._lang_get(lang_code)
         date_format = lang.date_format
@@ -67,16 +96,10 @@ class AccountMove(models.Model):
 
     def _add_surcharge_line(self, debit_note, product, debt, to_date, surcharge):
         self.ensure_one()
-        # partner = self.partner_id
         comment = self.prepare_info(to_date, debt, surcharge)
-        debit_note.write({'invoice_line_ids': [(0, 0, {
-            "product_id": product.id,
-        })]})
         debit_note = debit_note.with_context(check_move_validity=False)
-        debit_note.invoice_line_ids._onchange_product_id()
-        debit_note.invoice_line_ids[0].price_unit = float_round((surcharge / 100) * debt, precision_digits=2)
-        debit_note.invoice_line_ids[0].name = product.name + '.\n' + comment
-        debit_note._recompute_dynamic_lines()
+        line_vals = [Command.create({"product_id": product.id, "price_unit": (surcharge / 100) * debt, "name": product.name + '.\n' + comment})]
+        debit_note.write({'invoice_line_ids': line_vals})
 
     @api.depends('invoice_payment_term_id', 'invoice_date')
     def _compute_next_surcharge(self):
@@ -98,3 +121,20 @@ class AccountMove(models.Model):
             else:
                 rec.next_surcharge_date = False
                 rec.next_surcharge_percent = False
+
+    def _validate_next_surcharge_percent(self,surcharge_date, surcharge_percent):
+        self.ensure_one()
+        if len(self.invoice_payment_term_id.surcharge_ids) >1:
+            surcharges = []
+            for surcharge in self.invoice_payment_term_id.surcharge_ids:
+                tentative_date = surcharge._calculate_date(self.invoice_date)
+                surcharges.append({'surcharge_date': tentative_date, 'surcharge_percent': surcharge.surcharge})
+            
+            closest_surcharge = max(
+                (s for s in surcharges if s['surcharge_date'] <= surcharge_date),
+                key=lambda s: s['surcharge_date'],
+                default=None
+            )
+            if closest_surcharge.get('surcharge_percent') != surcharge_percent:
+                return False
+        return True
