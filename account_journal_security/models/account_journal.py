@@ -27,7 +27,7 @@ class AccountJournal(models.Model):
         'journal_security_journal_modification_users',
         'journal_id',
         'user_id',
-        string='Modifications restricted to',
+        string='Modifications allowed to',
         help='If choose some users, then only this users will be allow to '
         ' create, write or delete accounting data related of this journal. '
         'Information will still be visible for other users.',
@@ -115,9 +115,11 @@ class AccountJournal(models.Model):
             journal_ids = (user.journal_ids.ids + user.modification_journal_ids.ids)
             if limit == 1 and journal_ids:
                 # Agregamos el domain de los journals donde el usuario tiene permisos
-                domain += ['|',
-                           ('journal_restriction', '=', 'none'),
-                           ('id', 'in', journal_ids)]
+                domain += [
+                    '|',
+                    ('user_ids', '=', False),
+                    ('id', 'in', journal_ids),
+                ]
         return super()._search(domain, offset, limit, order, access_rights_uid=access_rights_uid)
 
     @api.onchange('journal_restriction')
